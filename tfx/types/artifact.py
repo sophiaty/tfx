@@ -24,7 +24,6 @@ import copy
 import enum
 import importlib
 import json
-import os
 from typing import Any, Dict, Optional, Text, Type
 
 import absl
@@ -491,8 +490,6 @@ class Artifact(json_utils.Jsonable):
 class ValueArtifact(Artifact):
   """Artifacts of small scalar-values that can be easily loaded into memory."""
 
-  VALUE_FILE = 'value'  # File name storing the actual value under uri.
-
   def __init__(self, *args, **kwargs):
     self._has_value = False
     self._modified = False
@@ -501,9 +498,9 @@ class ValueArtifact(Artifact):
 
   def read(self):
     if not self._has_value:
-      file_path = os.path.join(self.uri, self.__class__.VALUE_FILE)
+      file_path = self.uri
       # Assert there is a file exists.
-      if (not tf.io.gfile.exists(file_path)) or tf.io.gfile.isdir(file_path):
+      if not tf.io.gfile.exists(file_path):
         raise RuntimeError(
             'Given path does not exist or is not a valid file: %s' % file_path)
 
@@ -514,8 +511,12 @@ class ValueArtifact(Artifact):
 
   def write(self, value):
     serialized_value = self.encode(value)
-    tf.io.gfile.GFile(os.path.join(self.uri, self.__class__.VALUE_FILE),
-                      'wb').write(serialized_value)
+    if tf.io.gfile.exists(self.uri):
+      if tf.io.gfile.isdir(self.uri):
+        # Deleting the empty directory that is created by some drivers.
+        # Remove when b/150515270 is fixed
+        tf.io.gfile.rmtree(self.uri)
+    tf.io.gfile.GFile(self.uri, 'wb').write(serialized_value)
 
   @property
   def value(self):

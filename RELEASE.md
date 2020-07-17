@@ -37,6 +37,7 @@
 *   Requires [Bazel](https://bazel.build/) to build TFX source code.
 
 ## Breaking changes
+*   Changed the value artifacts to files.
 
 ### For pipeline authors
 *   Moved BigQueryExampleGen to `tfx.extensions.google_cloud_big_query`. The
