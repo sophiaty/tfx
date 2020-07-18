@@ -156,6 +156,18 @@ class ExecutorTest(tft_unit.TransformTestCase):
                                 self._exec_properties)
     self._verify_transform_outputs()
 
+  def testDoWithPreprocessingFnCustomConfig(self):
+    self._exec_properties['preprocessing_fn'] = '%s.%s' % (
+        transform_module.preprocessing_fn_with_custom_config.__module__,
+        transform_module.preprocessing_fn_with_custom_config.__name__)
+    self._exec_properties['custom_config'] = {
+        'VOCAB_SIZE': 1000,
+        'OOV_SIZE': 10
+    }
+    self._transform_executor.Do(self._input_dict, self._output_dict,
+                                self._exec_properties)
+    self._verify_transform_outputs()
+
   def testDoWithNoPreprocessingFn(self):
     with self.assertRaises(ValueError):
       self._transform_executor.Do(self._input_dict, self._output_dict,

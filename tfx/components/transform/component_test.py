@@ -25,6 +25,7 @@ from tfx.orchestration import data_types
 from tfx.types import artifact_utils
 from tfx.types import channel_utils
 from tfx.types import standard_artifacts
+from tfx.utils import json_utils
 
 
 class ComponentTest(tf.test.TestCase):
@@ -75,6 +76,21 @@ class ComponentTest(tf.test.TestCase):
     self._verify_outputs(transform)
     self.assertEqual(preprocessing_fn,
                      transform.spec.exec_properties['preprocessing_fn'])
+
+  def testConstructFromPreprocessingFnWithCustomConfig(self):
+    preprocessing_fn = 'path.to.my_preprocessing_fn'
+    custom_config = {'param': 1}
+    transform = component.Transform(
+        examples=self.examples,
+        schema=self.schema,
+        preprocessing_fn=preprocessing_fn,
+        custom_config=custom_config,
+    )
+    self._verify_outputs(transform)
+    self.assertEqual(preprocessing_fn,
+                     transform.spec.exec_properties['preprocessing_fn'])
+    self.assertEqual(json_utils.dumps(custom_config),
+                     transform.spec.exec_properties['custom_config'])
 
   def testConstructMissingUserModule(self):
     with self.assertRaises(ValueError):

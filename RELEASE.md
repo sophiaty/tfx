@@ -18,6 +18,8 @@
 *   Switched Transform component to use the new TFXIO code path. Users may
     potentially notice large performance improvement.
 *   Added support for primitive artifacts to InputValuePlaceholder.
+*   Added custom config to Transform component and made it available to
+    pre-processing fn.
 
 ## Bug fixes and other changes
 *   Added Tuner component to Iris e2e example.

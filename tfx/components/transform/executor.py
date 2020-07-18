@@ -18,6 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import functools
 import os
 from typing import Any, Dict, Generator, Iterable, List, Mapping, Optional, Sequence, Set, Text, Tuple, Union
 
@@ -336,6 +337,8 @@ class Executor(base_executor.BaseExecutor):
             exec_properties.get('module_file', None),
         labels.PREPROCESSING_FN:
             exec_properties.get('preprocessing_fn', None),
+        labels.CUSTOM_CONFIG:
+            exec_properties.get('custom_config', None),
     }
     cache_input = _GetCachePath('cache_input_path', input_dict)
     if cache_input is not None:
@@ -709,12 +712,15 @@ class Executor(base_executor.BaseExecutor):
                           unused_outputs: Mapping[Text, Any]) -> Any:
     """Returns a user defined preprocessing_fn.
 
+       If a custom config is provided in inputs, and also needed in
+       preprocessing_fn, bind it to preprocessing_fn.
+
     Args:
       inputs: A dictionary of labelled input values.
       unused_outputs: A dictionary of labelled output values.
 
     Returns:
-      User defined function.
+      User defined function, bound with an optional custom config.
 
     Raises:
       ValueError: When neither or both of MODULE_FILE and PREPROCESSING_FN
@@ -737,9 +743,18 @@ class Executor(base_executor.BaseExecutor):
 
     preprocessing_fn_path_split = value_utils.GetSoleValue(
         inputs, labels.PREPROCESSING_FN).split('.')
-    return import_utils.import_func_from_module(
+    fn = import_utils.import_func_from_module(
         '.'.join(preprocessing_fn_path_split[0:-1]),
         preprocessing_fn_path_split[-1])
+
+    custom_config = value_utils.GetSoleValue(inputs, labels.CUSTOM_CONFIG)
+
+    # For compatibility, only bind custom config if it's in the signature.
+    if custom_config and value_utils.FunctionHasArg(fn, labels.CUSTOM_CONFIG):
+      result = functools.partial(fn, custom_config=custom_config)
+    else:
+      result = fn
+    return result
 
   # TODO(b/122478841): Refine this API in following cls.
   # Note: This API is up to change.
@@ -766,6 +781,8 @@ class Executor(base_executor.BaseExecutor):
         - labels.MODULE_FILE: Path to a Python module that contains the
           preprocessing_fn, optional.
         - labels.PREPROCESSING_FN: Path to a Python function that implements
+          preprocessing_fn, optional.
+        - labels.CUSTOM_CONFIG: Dictionary of additional parameters for
           preprocessing_fn, optional.
       outputs: A dictionary of labelled output values, including:
         - labels.PER_SET_STATS_OUTPUT_PATHS_LABEL: Paths to statistics output,

@@ -17,7 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from typing import Optional, Text, Union
+from typing import Any, Dict, Optional, Text, Union
 
 import absl
 
@@ -30,6 +30,7 @@ from tfx.types import artifact
 from tfx.types import artifact_utils
 from tfx.types import standard_artifacts
 from tfx.types.standard_component_specs import TransformSpec
+from tfx.utils import json_utils
 
 
 class Transform(base_component.BaseComponent):
@@ -75,7 +76,8 @@ class Transform(base_component.BaseComponent):
       transform_graph: Optional[types.Channel] = None,
       transformed_examples: Optional[types.Channel] = None,
       input_data: Optional[types.Channel] = None,
-      instance_name: Optional[Text] = None):
+      instance_name: Optional[Text] = None,
+      custom_config: Optional[Dict[Text, Any]] = None):
     """Construct a Transform component.
 
     Args:
@@ -87,7 +89,9 @@ class Transform(base_component.BaseComponent):
         'preprocessing_fn' function will be loaded. The function must have the
         following signature.
 
-        def preprocessing_fn(inputs: Dict[Text, Any]) -> Dict[Text, Any]:
+        def preprocessing_fn(inputs: Dict[Text, Any], custom_config:
+                             Optional[Dict[Text, Any]] = None)
+                             -> Dict[Text, Any]:
           ...
 
         where the values of input and returned Dict are either tf.Tensor or
@@ -106,6 +110,8 @@ class Transform(base_component.BaseComponent):
       input_data: Backwards compatibility alias for the 'examples' argument.
       instance_name: Optional unique instance name. Necessary iff multiple
         transform components are declared in the same pipeline.
+      custom_config: A dict which contains addtional parameters that will be
+        passed to preprocessing_fn.
 
     Raises:
       ValueError: When both or neither of 'module_file' and 'preprocessing_fn'
@@ -137,5 +143,6 @@ class Transform(base_component.BaseComponent):
         module_file=module_file,
         preprocessing_fn=preprocessing_fn,
         transform_graph=transform_graph,
-        transformed_examples=transformed_examples)
+        transformed_examples=transformed_examples,
+        custom_config=json_utils.dumps(custom_config))
     super(Transform, self).__init__(spec=spec, instance_name=instance_name)
