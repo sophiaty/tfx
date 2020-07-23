@@ -32,6 +32,8 @@
 *   Supported multiple artifacts in an output Channel to match a certain input
     Channel's artifact count. This enables Transform component to process
     multiple artifacts.
+*   Supported custom extractors in Evaluator.
+
 
 ## Bug fixes and other changes
 *   Added Tuner component to Iris e2e example.

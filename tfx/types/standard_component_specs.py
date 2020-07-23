@@ -72,6 +72,8 @@ class EvaluatorSpec(ComponentSpec):
       # change at any time.
       'fairness_indicator_thresholds':
           ExecutionParameter(type=List[float], optional=True),
+      'module_file':
+          ExecutionParameter(type=(str, Text), optional=True),
   }
   INPUTS = {
       'examples':

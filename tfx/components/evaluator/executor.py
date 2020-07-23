@@ -32,6 +32,7 @@ from tfx import types
 from tfx.components.base import base_executor
 from tfx.components.evaluator import constants
 from tfx.components.util import tfxio_utils
+from tfx.components.util import udf_utils
 from tfx.proto import evaluator_pb2
 from tfx.types import artifact_utils
 from tfx.utils import io_utils
@@ -121,6 +122,10 @@ class Executor(base_executor.BaseExecutor):
     output_uri = artifact_utils.get_single_uri(
         output_dict[constants.EVALUATION_KEY])
 
+    eval_shared_model_fn = udf_utils.try_get_fn(
+        exec_properties=exec_properties,
+        fn_name='custom_eval_shared_model') or tfma.default_eval_shared_model
+
     run_validation = False
     models = []
     if 'eval_config' in exec_properties and exec_properties['eval_config']:
@@ -155,11 +160,12 @@ class Executor(base_executor.BaseExecutor):
           model_path = path_utils.serving_model_path(model_uri)
         absl.logging.info('Using {} as {} model.'.format(
             model_path, model_spec.name))
-        models.append(tfma.default_eval_shared_model(
-            model_name=model_spec.name,
-            eval_saved_model_path=model_path,
-            add_metrics_callbacks=add_metrics_callbacks,
-            eval_config=eval_config))
+        models.append(
+            eval_shared_model_fn(
+                eval_saved_model_path=model_path,
+                model_name=model_spec.name,
+                eval_config=eval_config,
+                add_metrics_callbacks=add_metrics_callbacks))
     else:
       eval_config = None
       assert ('feature_slicing_spec' in exec_properties and
@@ -173,9 +179,12 @@ class Executor(base_executor.BaseExecutor):
       model_uri = artifact_utils.get_single_uri(input_dict[constants.MODEL_KEY])
       model_path = path_utils.eval_model_path(model_uri)
       absl.logging.info('Using {} for model eval.'.format(model_path))
-      models.append(tfma.default_eval_shared_model(
-          eval_saved_model_path=model_path,
-          add_metrics_callbacks=add_metrics_callbacks))
+      models.append(
+          eval_shared_model_fn(
+              eval_saved_model_path=model_path,
+              model_name='',
+              eval_config=None,
+              add_metrics_callbacks=add_metrics_callbacks))
 
     file_pattern = io_utils.all_files_pattern(
         artifact_utils.get_split_uri(input_dict[constants.EXAMPLES_KEY], 'eval')
@@ -188,43 +197,44 @@ class Executor(base_executor.BaseExecutor):
               artifact_utils.get_single_uri(input_dict[constants.SCHEMA_KEY])))
 
     absl.logging.info('Evaluating model.')
+
     with self._make_beam_pipeline() as pipeline:
       # pylint: disable=expression-not-assigned
-      if _USE_TFXIO:
-        tensor_adapter_config = None
-        if tfma.is_batched_input(eval_shared_model, eval_config):
-          tfxio = tfxio_utils.get_tfxio_factory_from_artifact(
-              examples=input_dict[constants.EXAMPLES_KEY][0],
-              telemetry_descriptors=_TELEMETRY_DESCRIPTORS,
-              schema=schema,
-              raw_record_column_name=tfma_constants.ARROW_INPUT_COLUMN)(
-                  file_pattern)
-          if schema is not None:
-            tensor_adapter_config = tensor_adapter.TensorAdapterConfig(
-                arrow_schema=tfxio.ArrowSchema(),
-                tensor_representations=tfxio.TensorRepresentations())
-          data = pipeline | 'ReadFromTFRecordToArrow' >> tfxio.BeamSource()
-        else:
-          data = pipeline | 'ReadFromTFRecord' >> beam.io.ReadFromTFRecord(
-              file_pattern=file_pattern)
-        (data
-         | 'ExtractEvaluateAndWriteResults' >>
-         tfma.ExtractEvaluateAndWriteResults(
-             eval_shared_model=models[0] if len(models) == 1 else models,
-             eval_config=eval_config,
-             output_path=output_uri,
-             slice_spec=slice_spec,
-             tensor_adapter_config=tensor_adapter_config))
+      tensor_adapter_config = None
+      if _USE_TFXIO and tfma.is_batched_input(eval_shared_model, eval_config):
+        tfxio = tfxio_utils.get_tfxio_factory_from_artifact(
+            examples=input_dict[constants.EXAMPLES_KEY][0],
+            telemetry_descriptors=_TELEMETRY_DESCRIPTORS,
+            schema=schema,
+            raw_record_column_name=tfma_constants.ARROW_INPUT_COLUMN)(
+                file_pattern)
+        if schema is not None:
+          tensor_adapter_config = tensor_adapter.TensorAdapterConfig(
+              arrow_schema=tfxio.ArrowSchema(),
+              tensor_representations=tfxio.TensorRepresentations())
+        data = pipeline | 'ReadFromTFRecordToArrow' >> tfxio.BeamSource()
       else:
         data = pipeline | 'ReadFromTFRecord' >> beam.io.ReadFromTFRecord(
             file_pattern=file_pattern)
-        (data
-         | 'ExtractEvaluateAndWriteResults' >>
-         tfma.ExtractEvaluateAndWriteResults(
-             eval_shared_model=models[0] if len(models) == 1 else models,
-             eval_config=eval_config,
-             output_path=output_uri,
-             slice_spec=slice_spec))
+
+      custom_extractors = udf_utils.try_get_fn(
+          exec_properties=exec_properties, fn_name='custom_extractors')
+      extractors = None
+      if custom_extractors:
+        extractors = custom_extractors(
+            eval_shared_model=eval_shared_model,
+            eval_config=eval_config,
+            tensor_adapter_config=tensor_adapter_config)
+
+      (data
+       |
+       'ExtractEvaluateAndWriteResults' >> tfma.ExtractEvaluateAndWriteResults(
+           eval_shared_model=eval_shared_model,
+           eval_config=eval_config,
+           extractors=extractors,
+           output_path=output_uri,
+           slice_spec=slice_spec,
+           tensor_adapter_config=tensor_adapter_config))
     absl.logging.info(
         'Evaluation complete. Results written to {}.'.format(output_uri))
 
