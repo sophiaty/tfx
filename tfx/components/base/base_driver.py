@@ -36,9 +36,9 @@ def _generate_output_uri(base_output_dir: Text,
                          index: int = 0) -> Text:
   """Generate uri for output artifact."""
   if is_single_artifact:
-    return os.path.join(base_output_dir, name, str(execution_id), '')
+    return os.path.join(base_output_dir, name, str(execution_id))
 
-  return os.path.join(base_output_dir, name, str(execution_id), str(index), '')
+  return os.path.join(base_output_dir, name, str(execution_id), str(index))
 
 
 def _prepare_output_paths(artifact: types.Artifact):
